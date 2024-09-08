@@ -1,5 +1,25 @@
+# Alpine with glibc arm64
+FROM alpine:latest as alpine-glibc-arm64
+ENV LANG=C.UTF-8
+RUN apk add --no-cache wget && \
+    wget \
+        https://github.com/Rjerk/alpine-pkg-glibc/releases/download/2.30-r0-arm64/glibc-2.30-r0.apk \
+        https://github.com/Rjerk/alpine-pkg-glibc/releases/download/2.30-r0-arm64/glibc-bin-2.30-r0.apk \
+        https://github.com/Rjerk/alpine-pkg-glibc/releases/download/2.30-r0-arm64/glibc-i18n-2.30-r0.apk && \
+    mv /etc/nsswitch.conf /etc/nsswitch.conf.bak && \
+    apk add --no-cache --force-overwrite --allow-untrusted \
+        glibc-2.30-r0.apk \
+        glibc-bin-2.30-r0.apk \
+        glibc-i18n-2.30-r0.apk && \
+    mv /etc/nsswitch.conf.bak /etc/nsswitch.conf && \
+    (/usr/glibc-compat/bin/localedef --force --inputfile POSIX --charmap UTF-8 "$LANG" || true) && \
+    echo "export LANG=$LANG" > /etc/profile.d/locale.sh && \
+    apk del glibc-i18n && \
+    rm "/root/.wget-hsts" && \
+    rm glibc-2.30-r0.apk glibc-bin-2.30-r0.apk glibc-i18n-2.30-r0.apk
+
 # Compile redsocks 
-FROM frolvlad/alpine-glibc AS redsocks
+FROM alpine-glibc-arm64 AS redsocks
 RUN mkdir /tmp/redsocks
 WORKDIR /tmp/redsocks
 RUN apk add gcc musl-dev linux-headers libevent-dev git make upx
@@ -20,12 +40,11 @@ RUN apk --no-cache add git upx && \
 RUN upx -9 /go/bin/dnscrypt-proxy
 
 # Main docker
-FROM frolvlad/alpine-glibc 
+FROM alpine-glibc-arm64
 RUN mkdir -p /var/cache/pdnsd
 RUN apk add --no-cache libevent iptables
 COPY --from=redsocks /tmp/redsocks/redsocks  /usr/local/bin/redsocks
 COPY --from=dnscrypt /go/bin/dnscrypt-proxy /usr/local/bin/dnscrypt-proxy
-
 
 COPY redsocks.tmpl /etc/redsocks.tmpl
 COPY whitelist.txt /etc/redsocks-whitelist.txt
